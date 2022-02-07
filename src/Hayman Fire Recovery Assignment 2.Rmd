@@ -1,7 +1,7 @@
 ---
 title: "Hayman Fire Recovery"
-author: "Matthew Ross"
-date: "10/3/2019"
+author: "Austin Hopkins"
+date:  "`r format(Sys.time(), '%d %B, %Y')`"
 output: html_document
 ---
 
@@ -25,6 +25,7 @@ files <- list.files('data',full.names=T)
 
 
 #Read in individual data files
+files
 ndmi <- read_csv(files[1]) %>% 
   rename(burned=2,unburned=3) %>%
   mutate(data='ndmi')
@@ -43,8 +44,10 @@ full_long <- rbind(ndvi,ndmi,ndsi) %>%
   gather(key='site',value='value',-DateTime,-data) %>%
   filter(!is.na(value))
 
-
+view(full_long)
 ```
+
+
 
 
 
@@ -57,7 +60,26 @@ function "spread" and then make a plot that shows the correlation s a
 function of if the site was burned or not (x axis should be ndmi)
 You should exclude winter months and focus on summer months
 
+```{r}
 
+full_wide <- spread(data=full_long,key='data',value='value') %>%
+  filter_if(is.numeric,all_vars(!is.na(.))) %>%
+  mutate(month = month(DateTime),
+         year = year(DateTime))
+
+summer_only <- filter(full_wide,month %in% c(6,7,8,9))
+
+#Figure 1
+ggplot(summer_only,aes(x=ndmi,y=ndvi,color=site)) + 
+  geom_point() + 
+  theme_few() + 
+  scale_color_few() + 
+  theme(legend.position=c(0.8,0.8))
+```
+
+Figure 1. 
+
+There is a *powerful* positive correlation between the two indices NDMI (I always call it NDWI but to each his own) and NDVI. This makes simple logical sense. During temporal periods that we have more moisture, we are likely to have more vegetation thus more green showing up in the visible bands. We can also see that NDVI is typically higher for the unburned regions than the burned regions. The NDMI is higher in unburned areas which shows a greater potential for moisture/ 
 
 ## Question 2 
 
@@ -66,30 +88,95 @@ You should exclude winter months and focus on summer months
 In other words, does the previous year's snow cover influence vegetation
  growth for the following summer?
 
+```{r}
+jan_april <- filter(full_wide, month %in% c(1,2,3,4)) 
+
+sum_jan <- jan_april %>%
+  group_by(year,site) %>%
+  summarise(mean_ndsi=mean(ndsi)) %>%
+  mutate("year-site" = paste(year,site,sep=""))
+
+sum_aug <- summer_only %>%
+  group_by(year,site) %>%
+  summarise(mean_ndvi = mean(ndvi)) %>%
+  mutate("year-site" = paste(year,site,sep=""))
+
+sum_2 <- inner_join(x = sum_aug, y = sum_jan, by = "year-site")
+
+#Figure 2
+ggplot(sum_2,aes(x=mean_ndsi,y=mean_ndvi,color=site.x)) + 
+  geom_point() + 
+  theme_few() + 
+  scale_color_few() + 
+  theme(legend.position=c(0.8,0.2))
+ 
+
+
+```
+
+Figure 2.
+Above we can observe a poor correlation between the two indices NDSI and NDVI, especially in the burned sites. This makes logical sense because snowfall will accumulate where it falls, somewhat according to topography, and by the time productive growing season approaches, all that snow pack will be gone. The soil can only hold a certain amount of water and anything beyond that will just run off or drain out. There does seem to be some grouping of burned NDSI and NDVI values, this indicates the impact of the fire on reducing NDVI values along the same NDSI range. 
 
 ## Q3
 
 How is the snow effect from question 2 different between pre- and post-burn
 and burned and unburned? 
 
+```{r}
+sum_3 <- sum_2 %>%
+  mutate(fire = ifelse(year.x >= 2002, "Post", "Pre")) %>%
+  mutate(fire_site = ifelse(site.x == "burned", paste(fire,site.x,sep="-"), site.x)) %>%
+  select(-c("year-site","year.y","site.y","fire"))
+
+
+#Figure 3
+ggplot(sum_3,aes(x=mean_ndsi,y=mean_ndvi,color=fire_site)) + 
+  geom_point() + 
+  theme_few() + 
+  scale_color_few() + 
+  theme(legend.position=c(0.8,0.2))
+  
+```
+
+Figure 3.
+
+There is not much of a trend observed in both burned and unburned plots, though there is a slightly tighter trend between NDSI and NDVI in the unburned areas if we discount the year. The only difference that was observed is that the burned plots have a wider variance in yearly NDVI across the same NDSI when compared to plots that were unburned. THis passes the logic test, more moisture will have more of an impact on areas that can actually utilize the water. 
+
+The NDVI/NDSI relationship is weaker than the NDMI/NDVI relationship. Again this passes the logic test, NDMI values in Fig 2 are from the same temporal period as the NDVI values, where the NDSI values in Fig 4 come from the winter and represent the snow pack potential for moisture that can be stored for later. NDMI calues are a representation of the actual moisture available to the plants during the productive months, therefore we expect to see a positive correlation between NDMI/NDVI. 
 
 ## Question 4
 
-What month is the greenest month on average? 
+What month is the *greenest* month on average? 
+
+```{r}
+sum_full <- full_wide %>%
+  group_by(month) %>%
+  summarise(ndvi_mon =mean(ndvi),
+            ndsi_mon =mean(ndsi))
+greenest <- slice_max(sum_full, ndvi_mon)
+greenest
+```
 
 
-
-
+On average, August is the *greenist* month.
 ## Question 5) 
 
 What month is the snowiest on average?
+
+```{r}
+snowiest <- slice_max(sum_full,ndsi_mon)
+snowiest
+```
+On average, January is the *snowiest* month. 
+
+
+
+
+
 
 
 ## Bonus Question: Redo all problems with `spread` and `gather` using modern tidyverse syntax. 
 
 
-## Bonus Question: Use Climage Engine to pull the same data for the assignment, but updated with 2020/2021 data.
-
-
-
+## Bonus Question: Use Climate Engine to pull the same data for the assignment, but updated with 2020/2021 data.
 
